@@ -119,8 +119,13 @@ clean_total = round(merged["order_value"].sum(), 2)
 print("Merged shape:", merged.shape)
 print(f"Total order value (cleaned data): Rs {clean_total:.2f}")
 
-# Part 1 (SQL Report a) total, calculated on the raw data that still has duplicates
-part1_total = 99860.20
+# Part 1 (SQL Report a) total uses the RAW data: all 180 rows, duplicates included,
+# with a missing discount counted as 0% (like SQL's COALESCE).
+# We calculate the same thing here from the raw rows instead of typing the number in.
+# Expected: 99860.20 (same as Part 1 Report a)
+raw_with_price = orders.merge(products, on="product_id")      # orders still has all 180 rows
+raw_value = raw_with_price["quantity"] * raw_with_price["price"] * (1 - raw_with_price["discount_pct"].fillna(0) / 100)
+part1_total = round(raw_value.sum(), 2)
 difference = round(part1_total - clean_total, 2)
 print(f"\nPart 1 total : {part1_total:.2f}")
 print(f"Part 2 total : {clean_total:.2f}")
@@ -139,7 +144,7 @@ print(f"Value of dropped duplicates: {dropped_total:.2f}")   # Expected: 2501.90
 print("\nReconciliation note:")
 print(f"The cleaned total (Rs {clean_total:,.2f}) is Rs {difference:,.2f} lower than the Part 1 raw "
       f"total (Rs {part1_total:,.2f}). This difference comes only from the 5 duplicate orders removed "
-      f"in Task 3 (O0176-O0180). Their combined value is exactly Rs {dropped_total:,.2f}. "
+      f"in Task 3 ({', '.join(dropped_rows['order_id'])}). Their combined value is exactly Rs {dropped_total:,.2f}. "
       f"Filling missing values in Task 4 did not change the total: a missing discount filled with 0 "
       f"is the same as SQL's COALESCE(discount_pct, 0), and rating is not used to calculate order value.")
 
@@ -211,7 +216,7 @@ cod_tier1 = segment.loc[("COD", 1)]
 cod_tier2 = segment.loc[("COD", 2)]
 print(f"COD Tier-1: {int(cod_tier1['count'])} orders, return rate {cod_tier1['return_rate_%']}%")
 print(f"COD Tier-2: {int(cod_tier2['count'])} orders, return rate {cod_tier2['return_rate_%']}%")
-print("So COD risk is not the same everywhere: it is concentrated in Tier-2 cities.")
+print(f"So COD risk is not the same everywhere: it is concentrated in Tier-{highest[1]} cities.")
 
 
 # ---------------------------------------------------------------------
@@ -275,6 +280,11 @@ for month, value in monthly_without.items():
     print(month, f"{value:.2f}")
 print("Highest month:", monthly_without.idxmax())
 
-print("\nConclusion: January only looks like the best month because both bulk orders were placed "
-      "in January (O0011 on 2026-01-28 and O0098 on 2026-01-10). After removing them, "
-      "March is the real peak month. That is why we found outliers (Task 6) before this step.")
+# Build the conclusion from the data: which outlier orders, on which dates
+outlier_rows = merged[merged["is_outlier"]]
+outlier_text = " and ".join(f"{row.order_id} on {row.order_date:%Y-%m-%d}" for row in outlier_rows.itertuples())
+month_with = pd.to_datetime(monthly_with.idxmax()).strftime("%B")         # e.g. January
+month_without = pd.to_datetime(monthly_without.idxmax()).strftime("%B")   # e.g. March
+print(f"\nConclusion: {month_with} only looks like the best month because both bulk orders were placed "
+      f"in {month_with} ({outlier_text}). After removing them, "
+      f"{month_without} is the real peak month. That is why we found outliers (Task 6) before this step.")
