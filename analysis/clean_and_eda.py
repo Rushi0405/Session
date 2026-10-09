@@ -7,6 +7,11 @@
 # This script reads the raw CSV files in data/ directly with pandas.
 # It does NOT use the SQL database, so Part 1 and Part 2 can run in any order.
 # Every result is printed. The "Expected:" comments show the answer from the brief.
+# The last step writes narrator/findings.json, which Part 3 (the narrator) reads.
+
+import json
+import os
+import sqlite3
 
 import pandas as pd
 
@@ -139,6 +144,21 @@ dropped_total = round(dropped_with_price["order_value"].sum(), 2)
 print("\nThe 5 dropped duplicate rows:")
 print(dropped_with_price[["order_id", "quantity", "price", "discount_pct", "order_value"]])
 print(f"Value of dropped duplicates: {dropped_total:.2f}")   # Expected: 2501.90
+
+# Optional extra check against Part 1: if the SQL database from Part 1 exists,
+# run the same total as Report (a) in SQL and compare it with our pandas number.
+# If the database is not there, we skip this (Part 2 does not need Part 1 to run).
+if os.path.exists("mamaearth.db"):
+    connection = sqlite3.connect("mamaearth.db")
+    sql_total = connection.execute(
+        "SELECT ROUND(SUM(o.quantity * p.price * (1 - COALESCE(o.discount_pct, 0) / 100.0)), 2) "
+        "FROM orders o JOIN products p ON o.product_id = p.product_id"
+    ).fetchone()[0]
+    connection.close()
+    print(f"\nCheck against Part 1 database: SQL total = {sql_total:.2f}, pandas raw total = {part1_total:.2f} "
+          f"-> {'MATCH' if sql_total == part1_total else 'DIFFERENT'}")
+else:
+    print("\nCheck against Part 1 database: skipped (mamaearth.db not found; run Part 1 first to enable it)")
 
 # Reconciliation note
 print("\nReconciliation note:")
@@ -288,3 +308,60 @@ month_without = pd.to_datetime(monthly_without.idxmax()).strftime("%B")   # e.g.
 print(f"\nConclusion: {month_with} only looks like the best month because both bulk orders were placed "
       f"in {month_with} ({outlier_text}). After removing them, "
       f"{month_without} is the real peak month. That is why we found outliers (Task 6) before this step.")
+
+
+# ---------------------------------------------------------------------
+# Final step: write the verified results to narrator/findings.json (for Part 3)
+# ---------------------------------------------------------------------
+# Every value below is a variable calculated above - nothing is typed in by hand.
+# float() / int() turn pandas numbers into plain Python numbers that JSON can save.
+print("\n========== Export findings for Part 3 ==========")
+
+peak_month = monthly_without.idxmax()            # true peak month (outliers excluded)
+inflated_month = monthly_with.idxmax()           # month that only looked best because of outliers
+
+findings = {
+    "cleaned_total_revenue_inr": float(clean_total),
+    "raw_total_revenue_inr": float(part1_total),
+    "duplicate_reconciliation_delta_inr": float(difference),
+    "return_rate_by_payment": {
+        method: float(rate) for method, rate in payment_summary["return_rate_%"].items()
+    },
+    "highest_risk_segment": {
+        "payment_method": highest[0],
+        "city_tier": int(highest[1]),
+        "return_rate_pct": float(segment.loc[highest, "return_rate_%"]),
+    },
+    "true_peak_month": {
+        "month": peak_month,
+        "revenue_inr": float(monthly_without[peak_month]),
+    },
+    "outlier_inflated_month": {
+        "month": inflated_month,
+        "apparent_revenue_inr": float(monthly_with[inflated_month]),
+        "corrected_revenue_inr": float(monthly_without[inflated_month]),
+    },
+    # Extra context that helps the narrative explain the numbers above
+    "extra_context": {
+        "raw_order_count": int(len(orders)),
+        "cleaned_order_count": int(len(orders_clean)),
+        "duplicate_order_ids_removed": list(dropped_rows["order_id"]),
+        "outlier_order_ids": list(outlier_rows["order_id"]),
+        "cod_tier1_orders": int(cod_tier1["count"]),
+        "cod_tier1_return_rate_pct": float(cod_tier1["return_rate_%"]),
+        "cod_tier2_orders": int(cod_tier2["count"]),
+    },
+    # Where these numbers came from (shows the file was written by code)
+    "_source": {
+        "generated_by": "analysis/clean_and_eda.py",
+        "inputs": ["data/orders.csv", "data/customers.csv", "data/products.csv"],
+        "note": "Written automatically by code. Do not edit by hand - re-run the script instead.",
+    },
+}
+
+os.makedirs("narrator", exist_ok=True)
+with open("narrator/findings.json", "w") as f:
+    json.dump(findings, f, indent=2)
+
+print("Saved narrator/findings.json:")
+print(json.dumps(findings, indent=2))

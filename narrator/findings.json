@@ -1,0 +1,51 @@
+{
+  "cleaned_total_revenue_inr": 97358.3,
+  "raw_total_revenue_inr": 99860.2,
+  "duplicate_reconciliation_delta_inr": 2501.9,
+  "return_rate_by_payment": {
+    "COD": 44.4,
+    "UPI": 18.9,
+    "CARD": 14.7
+  },
+  "highest_risk_segment": {
+    "payment_method": "COD",
+    "city_tier": 2,
+    "return_rate_pct": 54.5
+  },
+  "true_peak_month": {
+    "month": "2026-03",
+    "revenue_inr": 20318.9
+  },
+  "outlier_inflated_month": {
+    "month": "2026-01",
+    "apparent_revenue_inr": 29582.1,
+    "corrected_revenue_inr": 11637.1
+  },
+  "extra_context": {
+    "raw_order_count": 180,
+    "cleaned_order_count": 175,
+    "duplicate_order_ids_removed": [
+      "O0176",
+      "O0177",
+      "O0178",
+      "O0179",
+      "O0180"
+    ],
+    "outlier_order_ids": [
+      "O0011",
+      "O0098"
+    ],
+    "cod_tier1_orders": 32,
+    "cod_tier1_return_rate_pct": 37.5,
+    "cod_tier2_orders": 22
+  },
+  "_source": {
+    "generated_by": "analysis/clean_and_eda.py",
+    "inputs": [
+      "data/orders.csv",
+      "data/customers.csv",
+      "data/products.csv"
+    ],
+    "note": "Written automatically by code. Do not edit by hand - re-run the script instead."
+  }
+}
