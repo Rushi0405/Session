@@ -1,11 +1,22 @@
--- Part 1, Task 2: seed data, generated 1:1 from data/customers.csv,
--- data/products.csv and data/orders.csv (no rows edited, no cleaning).
--- Blank discount_pct / rating cells are loaded as SQL NULL, not '' or 0.
--- Re-runnable: clears the tables first. Run after sql/schema.sql:
---   sqlite3 mamaearth.db < sql/seed_data.sql
+-- =====================================================================
+-- Part 1 - Task 2: Load the data (seed data)
+-- =====================================================================
+-- How to run (after schema.sql):  sqlite3 mamaearth.db < sql/seed_data.sql
+--
+-- These INSERT statements were made row-by-row from the 3 CSV files in data/.
+-- No row was changed or cleaned (cleaning is done later in Part 2, in Python).
+--
+-- A blank cell in the CSV (missing discount_pct or rating) is written as NULL,
+-- not as '' or 0, so COUNT(rating) in Report (b) works correctly.
+--
+-- Expected after loading: customers = 45, products = 16, orders = 180
 
 PRAGMA foreign_keys = ON;
+
+-- Run all inserts together as one transaction (faster, and all-or-nothing)
 BEGIN TRANSACTION;
+
+-- Empty the tables first so this file can be run again safely
 DELETE FROM orders;
 DELETE FROM products;
 DELETE FROM customers;
