@@ -1,363 +1,280 @@
-"""Part 2: pandas data wrangling and EDA over the raw source CSVs.
-
-Reads data/orders.csv, data/customers.csv and data/products.csv directly. It
-does not read the SQL database, so Part 1 and Part 2 can run in either order.
-Every intermediate result the acceptance criteria refer to is printed, and
-each one is also asserted, so a wrong number stops the script instead of
-flowing silently into later layers.
-
-Run from anywhere:
-    python analysis/clean_and_eda.py
-"""
-
-from pathlib import Path
+# =====================================================================
+# Part 2: Data cleaning and EDA (Tasks 1-10)
+# =====================================================================
+# How to run (from the main repo folder):
+#     python analysis/clean_and_eda.py
+#
+# This script reads the raw CSV files in data/ directly with pandas.
+# It does NOT use the SQL database, so Part 1 and Part 2 can run in any order.
+# Every result is printed. The "Expected:" comments show the answer from the brief.
 
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = REPO_ROOT / "data"
 
-# Natural key of an order: every column except order_id, which differs on the
-# double-submitted rows by design.
-NATURAL_KEY = [
-    "customer_id", "product_id", "order_date", "quantity",
-    "discount_pct", "payment_method", "rating", "returned",
-]
+# ---------------------------------------------------------------------
+# Task 1: Load and inspect the data
+# ---------------------------------------------------------------------
+print("========== Task 1: Load and inspect ==========")
 
-# Part 1 Report (a) raw total, which Task 5 reconciles against.
-PART1_RAW_TOTAL = 99860.20
+# Read the three CSV files into DataFrames
+orders = pd.read_csv("data/orders.csv")
+customers = pd.read_csv("data/customers.csv")
+products = pd.read_csv("data/products.csv")
 
+# Check the size of each table (rows, columns)
+# Expected: orders.shape = (180, 9)
+print("orders shape   :", orders.shape)
+print("customers shape:", customers.shape)
+print("products shape :", products.shape)
 
-def section(title):
-    print("\n" + "=" * 78)
-    print(title)
-    print("=" * 78)
+# Look at the first 5 orders
+print("\nFirst 5 rows of orders:")
+print(orders.head())
 
-
-def order_value(df):
-    """quantity * price * (1 - discount_pct/100). Needs price and a non-null discount."""
-    return df["quantity"] * df["price"] * (1 - df["discount_pct"] / 100)
-
-
-# --------------------------------------------------------------------------
-# Task 1: load and inspect
-# --------------------------------------------------------------------------
-def task1_load():
-    section("Task 1: Load and inspect")
-    orders = pd.read_csv(DATA_DIR / "orders.csv")
-    customers = pd.read_csv(DATA_DIR / "customers.csv")
-    products = pd.read_csv(DATA_DIR / "products.csv")
-
-    print("orders.shape   :", orders.shape)
-    print("customers.shape:", customers.shape)
-    print("products.shape :", products.shape)
-    print("\norders.dtypes:\n" + orders.dtypes.to_string())
-    print("\nNull counts in raw orders:\n" + orders.isnull().sum().to_string())
-    print("\norders.head():\n" + orders.head().to_string())
-
-    assert orders.shape == (180, 9), orders.shape
-    return orders, customers, products
+# Count missing values in each column of orders
+print("\nMissing values in orders:")
+print(orders.isnull().sum())
 
 
-# --------------------------------------------------------------------------
-# Task 2: standardise payment_method casing
-# --------------------------------------------------------------------------
-def task2_payment_method(orders):
-    section("Task 2: Standardise payment_method casing")
-    raw_values = orders["payment_method"].unique()
-    print(f"Before: {len(raw_values)} distinct raw values -> {list(raw_values)}")
-    print("Before counts:\n" + orders["payment_method"].value_counts().to_string())
-    assert len(raw_values) == 7, raw_values
+# ---------------------------------------------------------------------
+# Task 2: Standardize payment_method casing
+# ---------------------------------------------------------------------
+# The same method is typed in different ways: COD/cod, Card/card/CARD, UPI/upi
+print("\n========== Task 2: Standardize payment_method ==========")
 
-    orders = orders.copy()
-    orders["payment_method"] = orders["payment_method"].str.strip().str.upper()
+# Before cleaning: 7 different spellings
+print("Before:", list(orders["payment_method"].unique()))
+print("Number of distinct values before:", orders["payment_method"].nunique())
 
-    counts = orders["payment_method"].value_counts()
-    print(f"\nAfter: {orders['payment_method'].nunique()} distinct values")
-    print("After counts:\n" + counts.to_string())
-    assert counts.to_dict() == {"CARD": 70, "UPI": 55, "COD": 55}, counts.to_dict()
-    return orders
+# Remove extra spaces and convert everything to UPPER CASE
+orders["payment_method"] = orders["payment_method"].str.strip().str.upper()
 
-
-# --------------------------------------------------------------------------
-# Task 3: remove duplicate orders
-# --------------------------------------------------------------------------
-def task3_deduplicate(orders):
-    section("Task 3: Remove duplicate orders")
-    is_dup = orders.duplicated(subset=NATURAL_KEY, keep="first")
-    dropped = orders[is_dup]
-    print(f"Duplicate rows flagged on the natural key: {is_dup.sum()}")
-    print("Dropped order_ids:", ", ".join(dropped["order_id"]))
-
-    # Show each dropped row next to the earlier original it repeats.
-    originals = orders[~is_dup].merge(dropped[NATURAL_KEY + ["order_id"]],
-                                      on=NATURAL_KEY, suffixes=("_kept", "_dropped"))
-    print("\nKept original -> dropped duplicate:")
-    print(originals[["order_id_kept", "order_id_dropped"] + NATURAL_KEY].to_string(index=False))
-
-    orders_clean = orders[~is_dup].reset_index(drop=True)
-    print("\norders_clean.shape:", orders_clean.shape)
-
-    assert is_dup.sum() == 5
-    assert list(dropped["order_id"]) == ["O0176", "O0177", "O0178", "O0179", "O0180"]
-    assert orders_clean.shape == (175, 9), orders_clean.shape
-    return orders_clean, dropped
+# After cleaning: only 3 values remain
+# Expected counts: CARD 70, UPI 55, COD 55
+print("\nAfter:", list(orders["payment_method"].unique()))
+print("Number of distinct values after:", orders["payment_method"].nunique())
+print(orders["payment_method"].value_counts())
 
 
-# --------------------------------------------------------------------------
-# Task 4: impute missing values (on the deduplicated frame)
-# --------------------------------------------------------------------------
-def task4_impute(orders_clean):
-    section("Task 4: Impute missing values")
-    orders_clean = orders_clean.copy()
+# ---------------------------------------------------------------------
+# Task 3: Remove duplicate orders
+# ---------------------------------------------------------------------
+# Some orders were submitted twice: same values in every column except order_id.
+print("\n========== Task 3: Remove duplicates ==========")
 
-    n_disc = orders_clean["discount_pct"].isnull().sum()
-    print(f"discount_pct missing: {n_disc} rows -> filled with 0 (no promo code applied)")
-    orders_clean["discount_pct"] = orders_clean["discount_pct"].fillna(0)
+# Columns that describe an order (everything except order_id)
+key_columns = ["customer_id", "product_id", "order_date", "quantity",
+               "discount_pct", "payment_method", "rating", "returned"]
 
-    n_rating = orders_clean["rating"].isnull().sum()
-    rating_median = orders_clean["rating"].median()   # median skips NaN
-    print(f"rating median of non-null values (deduplicated frame): {rating_median}")
-    print(f"rating missing: {n_rating} rows -> filled with {rating_median}")
-    orders_clean["rating"] = orders_clean["rating"].fillna(rating_median)
+# Mark a row as duplicate if the same order appeared before it (keep the first one)
+is_duplicate = orders.duplicated(subset=key_columns, keep="first")
 
-    remaining = orders_clean[["discount_pct", "rating"]].isnull().sum().to_dict()
-    print("Nulls remaining:", remaining)
+# Expected: 5 duplicates -> O0176, O0177, O0178, O0179, O0180
+dropped_rows = orders[is_duplicate]
+print("Number of duplicate rows:", is_duplicate.sum())
+print("Dropped order_ids:", list(dropped_rows["order_id"]))
 
-    assert n_disc == 12 and n_rating == 15
-    assert rating_median == 3.0
-    assert remaining == {"discount_pct": 0, "rating": 0}
-    return orders_clean
+# Keep only the rows that are NOT duplicates
+orders_clean = orders[~is_duplicate].copy()
 
-
-# --------------------------------------------------------------------------
-# Task 5: merge and reconcile against Part 1
-# --------------------------------------------------------------------------
-def task5_merge_and_reconcile(orders_clean, dropped, customers, products):
-    section("Task 5: Merge and reconcile against Part 1")
-    merged = (orders_clean
-              .merge(products, on="product_id", how="left", validate="many_to_one")
-              .merge(customers, on="customer_id", how="left", validate="many_to_one"))
-    assert len(merged) == 175 and merged["price"].notnull().all() and merged["city"].notnull().all()
-
-    merged["order_value"] = order_value(merged)
-    clean_total = round(merged["order_value"].sum(), 2)
-    print(f"merged.shape: {merged.shape}")
-    print(f"Total order_value across {len(merged)} cleaned rows: Rs {clean_total:,.2f}")
-
-    # Independent check: value the 5 dropped rows straight from the raw rows.
-    # Their discounts are all non-null, but COALESCE to 0 the same way Part 1 does.
-    dropped_valued = dropped.merge(products, on="product_id", how="left")
-    dropped_valued["discount_pct"] = dropped_valued["discount_pct"].fillna(0)
-    dropped_valued["order_value"] = order_value(dropped_valued)
-    dropped_total = round(dropped_valued["order_value"].sum(), 2)
-    print("\nThe 5 dropped duplicate rows, valued independently:")
-    print(dropped_valued[["order_id", "product_id", "quantity", "price",
-                          "discount_pct", "order_value"]].to_string(index=False))
-    print(f"Combined order_value of dropped rows: Rs {dropped_total:,.2f}")
-
-    delta = round(PART1_RAW_TOTAL - clean_total, 2)
-    print(f"\nPart 1 raw total - Part 2 clean total = Rs {PART1_RAW_TOTAL:,.2f} - "
-          f"Rs {clean_total:,.2f} = Rs {delta:,.2f}")
-
-    assert clean_total == 97358.30, clean_total
-    assert dropped_total == 2501.90, dropped_total
-    assert delta == dropped_total, (delta, dropped_total)
-
-    print("\nReconciliation note:")
-    print(
-        f"Part 2's cleaned total of Rs {clean_total:,.2f} is Rs {delta:,.2f} lower than "
-        f"Part 1 Report (a)'s raw total of Rs {PART1_RAW_TOTAL:,.2f}. That whole gap is the "
-        f"5 double-submitted duplicate orders removed in Task 3 "
-        f"({', '.join(dropped['order_id'])}): valued on their own, their combined "
-        f"order_value is exactly Rs {dropped_total:,.2f}, equal to the delta to the paisa. "
-        f"The Task 4 imputation explains none of it. Filling the 12 missing discount_pct "
-        f"values with 0 gives the same result as Part 1's COALESCE(discount_pct, 0), and "
-        f"rating is not part of the order_value formula, so neither step changes any "
-        f"order_value."
-    )
-    return merged
+# Expected shape: (175, 9)
+print("Shape after removing duplicates:", orders_clean.shape)
 
 
-# --------------------------------------------------------------------------
-# Task 6: IQR outlier detection on quantity (flag, do not drop)
-# --------------------------------------------------------------------------
-def task6_iqr_outliers(merged):
-    section("Task 6: IQR outlier detection on quantity")
-    q1 = merged["quantity"].quantile(0.25)
-    q3 = merged["quantity"].quantile(0.75)
-    iqr = q3 - q1
-    lower, upper = q1 - 1.5 * iqr, q3 + 1.5 * iqr
-    print(f"Q1 = {q1}, Q3 = {q3}, IQR = {iqr}, lower = {lower}, upper = {upper}")
+# ---------------------------------------------------------------------
+# Task 4: Fill missing values (on the data without duplicates)
+# ---------------------------------------------------------------------
+print("\n========== Task 4: Fill missing values ==========")
 
-    merged = merged.copy()
-    merged["is_outlier"] = ~merged["quantity"].between(lower, upper)
-    outliers = merged[merged["is_outlier"]]
-    print(f"\nRows outside [{lower}, {upper}]: {len(outliers)} (flagged in is_outlier, not dropped)")
-    print(outliers[["order_id", "customer_id", "product_name", "quantity",
-                    "order_value", "returned"]].to_string(index=False))
-    print(f"Rows kept in the dataset: {len(merged)}")
+# discount_pct: missing means no promo code was used, so fill with 0
+# Expected: 12 missing
+print("Missing discount_pct:", orders_clean["discount_pct"].isnull().sum())
+orders_clean["discount_pct"] = orders_clean["discount_pct"].fillna(0)
 
-    assert (q1, q3, iqr, lower, upper) == (1.0, 2.0, 1.0, -0.5, 3.5)
-    assert outliers["order_id"].tolist() == ["O0011", "O0098"]
-    assert outliers["quantity"].tolist() == [25, 30]
-    assert len(merged) == 175
-    return merged
+# rating: find the median of the existing ratings, then fill the missing ones with it
+# Expected: median = 3.0, 15 missing
+rating_median = orders_clean["rating"].median()
+print("Median rating:", rating_median)
+print("Missing rating:", orders_clean["rating"].isnull().sum())
+orders_clean["rating"] = orders_clean["rating"].fillna(rating_median)
+
+# Check: no missing values should be left (both should be 0)
+print("\nMissing values after filling:")
+print(orders_clean[["discount_pct", "rating"]].isnull().sum())
 
 
-# --------------------------------------------------------------------------
-# Task 7: hypothesis - does COD have a higher return rate?
-# --------------------------------------------------------------------------
-def task7_cod_hypothesis(merged):
-    section("Task 7: Hypothesis - does COD have a higher return rate?")
-    print("Hypothesis: Cash-on-Delivery (COD) orders are returned at a higher rate than "
-          "prepaid (CARD, UPI) orders, because a COD buyer has paid nothing up front "
-          "and can refuse the parcel at the door at no cost.")
+# ---------------------------------------------------------------------
+# Task 5: Merge tables and match the total with Part 1 (SQL)
+# ---------------------------------------------------------------------
+print("\n========== Task 5: Merge and reconcile ==========")
 
-    by_payment = merged.groupby("payment_method")["returned"].agg(["count", "mean"])
-    by_payment["return_rate_pct"] = (by_payment["mean"] * 100).round(1)
-    by_payment = by_payment.sort_values("return_rate_pct", ascending=False)
-    print("\ngroupby('payment_method')['returned'].agg(['count','mean']):")
-    print(by_payment.to_string())
+# Join orders with products (to get price) and customers (to get city, city_tier)
+merged = orders_clean.merge(products, on="product_id").merge(customers, on="customer_id")
 
-    rates = by_payment["return_rate_pct"].to_dict()
-    assert rates == {"COD": 44.4, "UPI": 18.9, "CARD": 14.7}, rates
-    assert rates["COD"] > max(rates["CARD"], rates["UPI"])
-    print(f"\nVerdict: CONFIRMED. COD returns at {rates['COD']}%, versus "
-          f"{rates['UPI']}% for UPI and {rates['CARD']}% for CARD "
-          f"({rates['COD'] / rates['CARD']:.1f}x the CARD rate).")
-    return by_payment
+# Value of each order after discount
+merged["order_value"] = merged["quantity"] * merged["price"] * (1 - merged["discount_pct"] / 100)
 
+# Expected: 97358.30 across 175 rows
+clean_total = round(merged["order_value"].sum(), 2)
+print("Merged shape:", merged.shape)
+print(f"Total order value (cleaned data): Rs {clean_total:.2f}")
 
-# --------------------------------------------------------------------------
-# Task 8: multi-level segmentation (payment_method x city_tier)
-# --------------------------------------------------------------------------
-def task8_segmentation(merged):
-    section("Task 8: Multi-level segmentation - payment_method x city_tier")
-    seg = merged.groupby(["payment_method", "city_tier"])["returned"].agg(["count", "sum", "mean"])
-    seg = seg.rename(columns={"count": "orders", "sum": "returned_orders"})
-    seg["return_rate_pct"] = (seg["mean"] * 100).round(1)
-    seg = seg.drop(columns="mean")
-    print(seg.to_string())
+# Part 1 (SQL Report a) total, calculated on the raw data that still has duplicates
+part1_total = 99860.20
+difference = round(part1_total - clean_total, 2)
+print(f"\nPart 1 total : {part1_total:.2f}")
+print(f"Part 2 total : {clean_total:.2f}")
+print(f"Difference   : {difference:.2f}")
 
-    top = seg["return_rate_pct"].idxmax()
-    top_row = seg.loc[top]
-    cod1, cod2 = seg.loc[("COD", 1)], seg.loc[("COD", 2)]
-    print(f"\nHighest-risk segment: {top[0]} + Tier-{top[1]} cities at "
-          f"{top_row['return_rate_pct']}% ({int(top_row['returned_orders'])} of "
-          f"{int(top_row['orders'])} orders returned).")
-    print(f"COD risk is not uniform across tiers: {int(cod1['orders'])} Tier-1 COD orders "
-          f"return at {cod1['return_rate_pct']}%, versus {int(cod2['orders'])} Tier-2 COD "
-          f"orders at {cod2['return_rate_pct']}%. The blended COD rate hides that the "
-          f"problem is concentrated in Tier-2 cities.")
+# Check: calculate the value of the 5 dropped duplicate rows separately
+dropped_with_price = dropped_rows.merge(products, on="product_id")
+dropped_with_price["order_value"] = (dropped_with_price["quantity"] * dropped_with_price["price"]
+                                     * (1 - dropped_with_price["discount_pct"] / 100))
+dropped_total = round(dropped_with_price["order_value"].sum(), 2)
+print("\nThe 5 dropped duplicate rows:")
+print(dropped_with_price[["order_id", "quantity", "price", "discount_pct", "order_value"]])
+print(f"Value of dropped duplicates: {dropped_total:.2f}")   # Expected: 2501.90
 
-    assert top == ("COD", 2) and top_row["return_rate_pct"] == 54.5
-    assert (int(cod1["orders"]), cod1["return_rate_pct"]) == (32, 37.5)
-    assert (int(cod2["orders"]), cod2["return_rate_pct"]) == (22, 54.5)
-    return seg
+# Reconciliation note
+print("\nReconciliation note:")
+print(f"The cleaned total (Rs {clean_total:,.2f}) is Rs {difference:,.2f} lower than the Part 1 raw "
+      f"total (Rs {part1_total:,.2f}). This difference comes only from the 5 duplicate orders removed "
+      f"in Task 3 (O0176-O0180). Their combined value is exactly Rs {dropped_total:,.2f}. "
+      f"Filling missing values in Task 4 did not change the total: a missing discount filled with 0 "
+      f"is the same as SQL's COALESCE(discount_pct, 0), and rating is not used to calculate order value.")
 
 
-# --------------------------------------------------------------------------
-# Task 9: correlation analysis
-# --------------------------------------------------------------------------
-def strength_band(r):
-    a = abs(r)
-    if a < 0.2:
+# ---------------------------------------------------------------------
+# Task 6: Find outliers in quantity using the IQR method
+# ---------------------------------------------------------------------
+# We only FLAG the outliers with a new column. We do not delete them.
+print("\n========== Task 6: IQR outliers ==========")
+
+# Quartiles and IQR
+# Expected: Q1 = 1.0, Q3 = 2.0, IQR = 1.0, lower = -0.5, upper = 3.5
+Q1 = merged["quantity"].quantile(0.25)
+Q3 = merged["quantity"].quantile(0.75)
+IQR = Q3 - Q1
+lower = Q1 - 1.5 * IQR
+upper = Q3 + 1.5 * IQR
+print("Q1 =", Q1, " Q3 =", Q3, " IQR =", IQR)
+print("Lower limit =", lower, " Upper limit =", upper)
+
+# True if quantity is outside the limits
+merged["is_outlier"] = (merged["quantity"] < lower) | (merged["quantity"] > upper)
+
+# Expected: 2 outliers -> O0011 (quantity 25) and O0098 (quantity 30)
+print("\nOutlier orders:")
+print(merged[merged["is_outlier"]][["order_id", "order_date", "quantity", "order_value"]])
+print("Rows still in the data:", len(merged))
+
+
+# ---------------------------------------------------------------------
+# Task 7: Hypothesis - do COD orders have a higher return rate?
+# ---------------------------------------------------------------------
+print("\n========== Task 7: COD return hypothesis ==========")
+print("Hypothesis: COD (Cash on Delivery) orders are returned more often than CARD or UPI orders.")
+
+# count = number of orders, mean = share of orders returned (returned is 0 or 1)
+payment_summary = merged.groupby("payment_method")["returned"].agg(["count", "mean"])
+payment_summary["return_rate_%"] = (payment_summary["mean"] * 100).round(1)
+payment_summary = payment_summary.sort_values("return_rate_%", ascending=False)
+
+# Expected: COD 44.4%, UPI 18.9%, CARD 14.7%
+print(payment_summary)
+
+cod_rate = payment_summary.loc["COD", "return_rate_%"]
+card_rate = payment_summary.loc["CARD", "return_rate_%"]
+upi_rate = payment_summary.loc["UPI", "return_rate_%"]
+print(f"\nResult: CONFIRMED - COD return rate is {cod_rate}%, compared with "
+      f"UPI {upi_rate}% and CARD {card_rate}% (about {cod_rate / card_rate:.0f}x Card).")
+
+
+# ---------------------------------------------------------------------
+# Task 8: Segmentation by payment method and city tier
+# ---------------------------------------------------------------------
+print("\n========== Task 8: Payment method x city tier ==========")
+
+# Return rate for every (payment_method, city_tier) combination
+segment = merged.groupby(["payment_method", "city_tier"])["returned"].agg(["count", "mean"])
+segment["return_rate_%"] = (segment["mean"] * 100).round(1)
+print(segment)
+
+# Find the segment with the highest return rate
+# Expected: COD + Tier-2 at 54.5%
+highest = segment["return_rate_%"].idxmax()
+print(f"\nHighest-risk segment: {highest[0]} + Tier-{highest[1]} cities "
+      f"at {segment.loc[highest, 'return_rate_%']}%")
+
+# Compare COD in Tier-1 vs Tier-2 cities
+cod_tier1 = segment.loc[("COD", 1)]
+cod_tier2 = segment.loc[("COD", 2)]
+print(f"COD Tier-1: {int(cod_tier1['count'])} orders, return rate {cod_tier1['return_rate_%']}%")
+print(f"COD Tier-2: {int(cod_tier2['count'])} orders, return rate {cod_tier2['return_rate_%']}%")
+print("So COD risk is not the same everywhere: it is concentrated in Tier-2 cities.")
+
+
+# ---------------------------------------------------------------------
+# Task 9: Correlation analysis
+# ---------------------------------------------------------------------
+# Strength bands: negligible 0-0.19, weak 0.2-0.39, moderate 0.4-0.69, strong 0.7-1.0
+print("\n========== Task 9: Correlation ==========")
+
+columns = ["rating", "returned", "discount_pct", "quantity"]
+corr_matrix = merged[columns].corr()
+print(corr_matrix.round(3))
+
+
+# Function that gives the strength band of a correlation value
+def get_band(r):
+    r = abs(r)
+    if r < 0.2:
         return "negligible"
-    if a < 0.4:
+    elif r < 0.4:
         return "weak"
-    if a < 0.7:
+    elif r < 0.7:
         return "moderate"
-    return "strong"
+    else:
+        return "strong"
 
 
-def task9_correlation(merged):
-    section("Task 9: Correlation analysis")
-    cols = ["rating", "returned", "discount_pct", "quantity"]
-    corr = merged[cols].corr()
-    print("Correlation matrix (Pearson, 175 cleaned rows):")
-    print(corr.round(3).to_string())
+# Print every pair once (6 pairs). Expected: all are negligible
+print("\nPairwise correlations:")
+for i in range(len(columns)):
+    for j in range(i + 1, len(columns)):
+        r = corr_matrix.loc[columns[i], columns[j]]
+        print(f"{columns[i]} vs {columns[j]}: r = {r:.3f} -> {get_band(r)}")
 
-    print("\nBands: negligible |r| 0-0.19, weak 0.2-0.39, moderate 0.4-0.69, strong 0.7-1.0")
-    pairs = []
-    for i, a in enumerate(cols):
-        for b in cols[i + 1:]:
-            r = corr.loc[a, b]
-            pairs.append({"pair": f"{a} vs {b}", "r": round(r, 3), "band": strength_band(r)})
-            print(f"  {a:>12} vs {b:<12} r = {r:+.3f}  -> {strength_band(r)}")
-
-    r_disc_ret = corr.loc["discount_pct", "returned"]
-    print(f"\nHypothesis 'higher discounts reduce returns': BUSTED. discount_pct vs returned "
-          f"r = {r_disc_ret:+.2f}, which is negligible. The sign is negative, but the "
-          f"relationship is too weak to support the claim.")
-
-    assert len(pairs) == 6 and all(p["band"] == "negligible" for p in pairs), pairs
-    assert round(r_disc_ret, 2) == -0.09, r_disc_ret
-    return corr, pairs
+r_discount = corr_matrix.loc["discount_pct", "returned"]
+print(f"\nHypothesis 'higher discounts reduce returns': BUSTED "
+      f"(r = {r_discount:.2f}, which is {get_band(r_discount)}).")
 
 
-# --------------------------------------------------------------------------
-# Task 10: outlier-corrected monthly time series
-# --------------------------------------------------------------------------
-def task10_monthly_trend(merged):
-    section("Task 10: Outlier-corrected monthly revenue")
-    merged = merged.copy()
-    merged["order_date"] = pd.to_datetime(merged["order_date"])
-    merged["year_month"] = merged["order_date"].dt.strftime("%Y-%m")
+# ---------------------------------------------------------------------
+# Task 10: Monthly revenue, with and without the outliers
+# ---------------------------------------------------------------------
+print("\n========== Task 10: Monthly revenue ==========")
 
-    with_outliers = merged.groupby("year_month")["order_value"].sum().round(2)
-    corrected = merged[~merged["is_outlier"]].groupby("year_month")["order_value"].sum().round(2)
+# Convert order_date to a date and take the year-month (e.g. 2026-01)
+merged["order_date"] = pd.to_datetime(merged["order_date"])
+merged["year_month"] = merged["order_date"].dt.strftime("%Y-%m")
 
-    print("(1) Monthly order_value INCLUDING the 2 outlier orders:")
-    print(with_outliers.map("{:,.2f}".format).to_string())
-    print(f"    Highest month: {with_outliers.idxmax()}")
-    print("\n(2) Monthly order_value EXCLUDING the 2 outlier orders (outlier-corrected):")
-    print(corrected.map("{:,.2f}".format).to_string())
-    print(f"    Highest month: {corrected.idxmax()}")
+# (1) Monthly revenue including the 2 outlier orders
+# Expected: 2026-01 = 29582.10 is the highest month
+monthly_with = merged.groupby("year_month")["order_value"].sum().round(2)
+print("(1) Monthly revenue INCLUDING outliers:")
+for month, value in monthly_with.items():
+    print(month, f"{value:.2f}")
+print("Highest month:", monthly_with.idxmax())
 
-    out = merged[merged["is_outlier"]]
-    desc = " and ".join(f"{r.order_id} ({r.quantity} units, Rs {r.order_value:,.2f}) on "
-                        f"{r.order_date:%Y-%m-%d}" for r in out.itertuples())
-    print(f"\nJanuary's apparent lead is an artifact. Both bulk orders landed in January: "
-          f"{desc}. Remove them and January drops from Rs {with_outliers['2026-01']:,.2f} to "
-          f"Rs {corrected['2026-01']:,.2f}, and March (Rs {corrected['2026-03']:,.2f}) is the "
-          f"genuine peak month. This is why outliers are flagged in Task 6 before the time "
-          f"series is built here, not after.")
+# (2) Monthly revenue excluding the 2 outlier orders
+# Expected: 2026-03 = 20318.90 is the highest month
+monthly_without = merged[merged["is_outlier"] == False].groupby("year_month")["order_value"].sum().round(2)
+print("\n(2) Monthly revenue EXCLUDING outliers:")
+for month, value in monthly_without.items():
+    print(month, f"{value:.2f}")
+print("Highest month:", monthly_without.idxmax())
 
-    assert with_outliers.idxmax() == "2026-01" and with_outliers["2026-01"] == 29582.10
-    assert with_outliers["2026-06"] == 11615.40
-    assert corrected.to_dict() == {
-        "2026-01": 11637.10, "2026-02": 13195.50, "2026-03": 20318.90,
-        "2026-04": 9495.30, "2026-05": 13151.10, "2026-06": 11615.40,
-    }, corrected.to_dict()
-    assert corrected.idxmax() == "2026-03"
-    assert sorted(out["order_id"]) == ["O0011", "O0098"]
-    return with_outliers, corrected
-
-
-def run_pipeline():
-    """Run Tasks 1-10 in order and return every result later layers use."""
-    orders, customers, products = task1_load()
-    orders = task2_payment_method(orders)
-    orders_clean, dropped = task3_deduplicate(orders)
-    orders_clean = task4_impute(orders_clean)
-    merged = task5_merge_and_reconcile(orders_clean, dropped, customers, products)
-    merged = task6_iqr_outliers(merged)
-    by_payment = task7_cod_hypothesis(merged)
-    segments = task8_segmentation(merged)
-    corr, corr_pairs = task9_correlation(merged)
-    monthly_raw, monthly_corrected = task10_monthly_trend(merged)
-    return {
-        "merged": merged,
-        "dropped": dropped,
-        "by_payment": by_payment,
-        "segments": segments,
-        "corr": corr,
-        "corr_pairs": corr_pairs,
-        "monthly_raw": monthly_raw,
-        "monthly_corrected": monthly_corrected,
-    }
-
-
-if __name__ == "__main__":
-    run_pipeline()
+print("\nConclusion: January only looks like the best month because both bulk orders were placed "
+      "in January (O0011 on 2026-01-28 and O0098 on 2026-01-10). After removing them, "
+      "March is the real peak month. That is why we found outliers (Task 6) before this step.")

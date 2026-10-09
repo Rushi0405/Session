@@ -1,127 +1,76 @@
-"""Part 2, Task 11: the two charts, saved to visualizations/.
+# =====================================================================
+# Part 2 - Task 11: Two visualizations
+# =====================================================================
+# How to run (from the main repo folder, after clean_and_eda.py):
+#     python analysis/visualize.py
+#
+# The charts use the results calculated in clean_and_eda.py.
+# "import clean_and_eda" runs that script again from the raw CSV files,
+# so no number is typed in by hand. (Its printed output appears again first.)
+# Both charts are saved in the visualizations/ folder.
 
-The numbers are not retyped or read from a hand-made file. This script imports
-and re-runs the clean_and_eda pipeline on the raw CSVs, then plots the results
-of Task 7 (return rate by payment method) and Task 10 (outlier-corrected
-monthly revenue). Re-running regenerates byte-identical PNGs.
-
-Run after clean_and_eda.py (it does not depend on that run's output, so the
-order is for readability only):
-    python analysis/visualize.py
-"""
-
-import contextlib
-import io
-from datetime import datetime
+import os
 
 import matplotlib
+matplotlib.use("Agg")              # save charts to files (no window needed)
+import matplotlib.pyplot as plt
+import pandas as pd
 
-matplotlib.use("Agg")  # file output only, no display needed
-import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.ticker import FuncFormatter  # noqa: E402
+import clean_and_eda as eda        # gives us eda.payment_summary and eda.monthly_without
 
-from clean_and_eda import REPO_ROOT, run_pipeline  # noqa: E402
-
-OUT_DIR = REPO_ROOT / "visualizations"
-
-# Chart tokens: one data hue for the highlighted mark, a muted tone for context
-# marks, and neutral inks for all text (text never takes the data colour).
-SURFACE = "#fcfcfb"
-TEXT_PRIMARY = "#0b0b0b"
-TEXT_SECONDARY = "#52514e"
-GRID = "#e4e3df"
-HIGHLIGHT = "#2a78d6"
-MUTED = "#b8b7b0"
-
-# Drop matplotlib's version string from the PNG so the output is byte-identical
-# across runs and machines with the same library version.
-PNG_METADATA = {"Software": None}
+# Create the output folder if it does not exist yet
+os.makedirs("visualizations", exist_ok=True)
 
 
-def style_axes(ax):
-    ax.set_facecolor(SURFACE)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(TEXT_SECONDARY)
-    ax.tick_params(colors=TEXT_SECONDARY, length=0)
-    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
-    ax.set_axisbelow(True)
+# ---------------------------------------------------------------------
+# Chart 1: Return rate by payment method (bar chart)
+# ---------------------------------------------------------------------
+# payment_summary is already sorted from highest to lowest return rate (Task 7)
+rates = eda.payment_summary["return_rate_%"]
+cod_rate = rates["COD"]
+card_rate = rates["CARD"]
+
+# Highlight COD in blue, other methods in grey
+colors = ["#2a78d6" if method == "COD" else "#b8b7b0" for method in rates.index]
+
+plt.figure(figsize=(7, 5))
+plt.bar(rates.index, rates.values, color=colors, width=0.5)
+
+# Write the exact percentage on top of each bar
+for i, value in enumerate(rates.values):
+    plt.text(i, value + 1, f"{value}%", ha="center", fontsize=12, fontweight="bold")
+
+# Title states the finding, e.g. "COD Returns at 44.4% - 3x Card"
+plt.title(f"COD Returns at {cod_rate}% — {cod_rate / card_rate:.0f}x Card", fontsize=14, fontweight="bold")
+plt.xlabel("Payment method")
+plt.ylabel("Return rate (%)")
+plt.ylim(0, rates.max() * 1.2)
+plt.savefig("visualizations/return_rate_by_payment.png", dpi=150, bbox_inches="tight")
+plt.close()
+print("\nSaved visualizations/return_rate_by_payment.png")
 
 
-def plot_return_rate_by_payment(by_payment, path):
-    rates = by_payment["return_rate_pct"].sort_values(ascending=False)
-    counts = by_payment["count"]
-    top = rates.index[0]
-    ratio = rates[top] / rates.min()
+# ---------------------------------------------------------------------
+# Chart 2: Monthly revenue trend, outlier-corrected (line chart)
+# ---------------------------------------------------------------------
+# We use monthly_without (Task 10), NOT the version inflated by the 2 bulk orders
+monthly = eda.monthly_without
+peak_month = monthly.idxmax()                                   # e.g. "2026-03"
+peak_name = pd.to_datetime(peak_month).strftime("%B %Y")        # e.g. "March 2026"
 
-    fig, ax = plt.subplots(figsize=(7, 4.5), facecolor=SURFACE)
-    style_axes(ax)
-    colors = [HIGHLIGHT if m == top else MUTED for m in rates.index]
-    bars = ax.bar(rates.index, rates.values, width=0.5, color=colors)
-    for bar, method in zip(bars, rates.index):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
-                f"{rates[method]:.1f}%", ha="center", va="bottom",
-                fontsize=12, fontweight="bold", color=TEXT_PRIMARY)
+plt.figure(figsize=(8, 5))
+plt.plot(monthly.index, monthly.values, marker="o", linewidth=2, color="#2a78d6")
 
-    ax.set_xticks(range(len(rates)))
-    ax.set_xticklabels([f"{m}\n({counts[m]} orders)" for m in rates.index], color=TEXT_PRIMARY)
-    ax.set_ylabel("Return rate (%)", color=TEXT_SECONDARY)
-    ax.set_xlabel("Payment method (cleaned, 175 orders)", color=TEXT_SECONDARY)
-    ax.set_ylim(0, rates.max() * 1.2)
-    ax.set_title(f"{top} Returns at {rates[top]:.1f}% — {ratio:.0f}x {rates.idxmin().title()}",
-                 loc="left", fontsize=14, fontweight="bold", color=TEXT_PRIMARY)
+# Label the peak month with its value
+plt.annotate(f"Rs {monthly.max():,.2f}", (peak_month, monthly.max()),
+             textcoords="offset points", xytext=(0, 10), ha="center", fontweight="bold")
 
-    fig.tight_layout()
-    fig.savefig(path, dpi=150, facecolor=SURFACE, metadata=PNG_METADATA)
-    plt.close(fig)
-
-
-def plot_monthly_revenue_trend(monthly_corrected, path):
-    months = list(monthly_corrected.index)
-    values = monthly_corrected.values
-    peak = monthly_corrected.idxmax()
-    peak_i = months.index(peak)
-    peak_label = f"{datetime.strptime(peak, '%Y-%m'):%B %Y}"
-
-    fig, ax = plt.subplots(figsize=(8, 4.5), facecolor=SURFACE)
-    style_axes(ax)
-    ax.plot(months, values, color=HIGHLIGHT, linewidth=2, marker="o", markersize=7,
-            markerfacecolor=HIGHLIGHT, markeredgecolor=SURFACE, markeredgewidth=1.5)
-
-    # Label only the peak and the final point, not every marker.
-    for i in sorted({peak_i, len(months) - 1}):
-        ax.annotate(f"₹{values[i]:,.2f}", (i, values[i]), textcoords="offset points",
-                    xytext=(0, 10), ha="center", fontsize=10,
-                    fontweight="bold" if i == peak_i else "normal", color=TEXT_PRIMARY)
-
-    ax.set_ylim(0, values.max() * 1.18)
-    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"₹{v:,.0f}"))
-    ax.set_xlabel("Month (order_date)", color=TEXT_SECONDARY)
-    ax.set_ylabel("Revenue (order_value, INR)", color=TEXT_SECONDARY)
-    ax.set_title(f"{peak_label} Is the True Revenue Peak (Outliers Excluded)",
-                 loc="left", fontsize=14, fontweight="bold", color=TEXT_PRIMARY, pad=24)
-    ax.text(0, 1.02, "Outlier-corrected: bulk orders O0011 and O0098 removed from January",
-            transform=ax.transAxes, fontsize=9, color=TEXT_SECONDARY, va="bottom")
-
-    fig.tight_layout()
-    fig.savefig(path, dpi=150, facecolor=SURFACE, metadata=PNG_METADATA)
-    plt.close(fig)
-
-
-def main():
-    # Re-run the pipeline quietly; its full printed audit trail belongs to
-    # clean_and_eda.py. Its assertions still run, so a wrong number stops here too.
-    with contextlib.redirect_stdout(io.StringIO()):
-        results = run_pipeline()
-
-    OUT_DIR.mkdir(exist_ok=True)
-    p1 = OUT_DIR / "return_rate_by_payment.png"
-    p2 = OUT_DIR / "monthly_revenue_trend.png"
-    plot_return_rate_by_payment(results["by_payment"], p1)
-    plot_monthly_revenue_trend(results["monthly_corrected"], p2)
-    print(f"Saved {p1.relative_to(REPO_ROOT)}")
-    print(f"Saved {p2.relative_to(REPO_ROOT)}")
-
-
-if __name__ == "__main__":
-    main()
+# Title names the real peak month
+plt.title(f"{peak_name} Is the Peak Revenue Month (Outliers Excluded)", fontsize=14, fontweight="bold")
+plt.xlabel("Month")
+plt.ylabel("Revenue (INR)")
+plt.ylim(0, monthly.max() * 1.2)
+plt.grid(axis="y", alpha=0.3)
+plt.savefig("visualizations/monthly_revenue_trend.png", dpi=150, bbox_inches="tight")
+plt.close()
+print("Saved visualizations/monthly_revenue_trend.png")
