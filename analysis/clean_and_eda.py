@@ -205,15 +205,159 @@ def task6_iqr_outliers(merged):
     return merged
 
 
-def main():
+# --------------------------------------------------------------------------
+# Task 7: hypothesis - does COD have a higher return rate?
+# --------------------------------------------------------------------------
+def task7_cod_hypothesis(merged):
+    section("Task 7: Hypothesis - does COD have a higher return rate?")
+    print("Hypothesis: Cash-on-Delivery (COD) orders are returned at a higher rate than "
+          "prepaid (CARD, UPI) orders, because a COD buyer has paid nothing up front "
+          "and can refuse the parcel at the door at no cost.")
+
+    by_payment = merged.groupby("payment_method")["returned"].agg(["count", "mean"])
+    by_payment["return_rate_pct"] = (by_payment["mean"] * 100).round(1)
+    by_payment = by_payment.sort_values("return_rate_pct", ascending=False)
+    print("\ngroupby('payment_method')['returned'].agg(['count','mean']):")
+    print(by_payment.to_string())
+
+    rates = by_payment["return_rate_pct"].to_dict()
+    assert rates == {"COD": 44.4, "UPI": 18.9, "CARD": 14.7}, rates
+    assert rates["COD"] > max(rates["CARD"], rates["UPI"])
+    print(f"\nVerdict: CONFIRMED. COD returns at {rates['COD']}%, versus "
+          f"{rates['UPI']}% for UPI and {rates['CARD']}% for CARD "
+          f"({rates['COD'] / rates['CARD']:.1f}x the CARD rate).")
+    return by_payment
+
+
+# --------------------------------------------------------------------------
+# Task 8: multi-level segmentation (payment_method x city_tier)
+# --------------------------------------------------------------------------
+def task8_segmentation(merged):
+    section("Task 8: Multi-level segmentation - payment_method x city_tier")
+    seg = merged.groupby(["payment_method", "city_tier"])["returned"].agg(["count", "sum", "mean"])
+    seg = seg.rename(columns={"count": "orders", "sum": "returned_orders"})
+    seg["return_rate_pct"] = (seg["mean"] * 100).round(1)
+    seg = seg.drop(columns="mean")
+    print(seg.to_string())
+
+    top = seg["return_rate_pct"].idxmax()
+    top_row = seg.loc[top]
+    cod1, cod2 = seg.loc[("COD", 1)], seg.loc[("COD", 2)]
+    print(f"\nHighest-risk segment: {top[0]} + Tier-{top[1]} cities at "
+          f"{top_row['return_rate_pct']}% ({int(top_row['returned_orders'])} of "
+          f"{int(top_row['orders'])} orders returned).")
+    print(f"COD risk is not uniform across tiers: {int(cod1['orders'])} Tier-1 COD orders "
+          f"return at {cod1['return_rate_pct']}%, versus {int(cod2['orders'])} Tier-2 COD "
+          f"orders at {cod2['return_rate_pct']}%. The blended COD rate hides that the "
+          f"problem is concentrated in Tier-2 cities.")
+
+    assert top == ("COD", 2) and top_row["return_rate_pct"] == 54.5
+    assert (int(cod1["orders"]), cod1["return_rate_pct"]) == (32, 37.5)
+    assert (int(cod2["orders"]), cod2["return_rate_pct"]) == (22, 54.5)
+    return seg
+
+
+# --------------------------------------------------------------------------
+# Task 9: correlation analysis
+# --------------------------------------------------------------------------
+def strength_band(r):
+    a = abs(r)
+    if a < 0.2:
+        return "negligible"
+    if a < 0.4:
+        return "weak"
+    if a < 0.7:
+        return "moderate"
+    return "strong"
+
+
+def task9_correlation(merged):
+    section("Task 9: Correlation analysis")
+    cols = ["rating", "returned", "discount_pct", "quantity"]
+    corr = merged[cols].corr()
+    print("Correlation matrix (Pearson, 175 cleaned rows):")
+    print(corr.round(3).to_string())
+
+    print("\nBands: negligible |r| 0-0.19, weak 0.2-0.39, moderate 0.4-0.69, strong 0.7-1.0")
+    pairs = []
+    for i, a in enumerate(cols):
+        for b in cols[i + 1:]:
+            r = corr.loc[a, b]
+            pairs.append({"pair": f"{a} vs {b}", "r": round(r, 3), "band": strength_band(r)})
+            print(f"  {a:>12} vs {b:<12} r = {r:+.3f}  -> {strength_band(r)}")
+
+    r_disc_ret = corr.loc["discount_pct", "returned"]
+    print(f"\nHypothesis 'higher discounts reduce returns': BUSTED. discount_pct vs returned "
+          f"r = {r_disc_ret:+.2f}, which is negligible. The sign is negative, but the "
+          f"relationship is too weak to support the claim.")
+
+    assert len(pairs) == 6 and all(p["band"] == "negligible" for p in pairs), pairs
+    assert round(r_disc_ret, 2) == -0.09, r_disc_ret
+    return corr, pairs
+
+
+# --------------------------------------------------------------------------
+# Task 10: outlier-corrected monthly time series
+# --------------------------------------------------------------------------
+def task10_monthly_trend(merged):
+    section("Task 10: Outlier-corrected monthly revenue")
+    merged = merged.copy()
+    merged["order_date"] = pd.to_datetime(merged["order_date"])
+    merged["year_month"] = merged["order_date"].dt.strftime("%Y-%m")
+
+    with_outliers = merged.groupby("year_month")["order_value"].sum().round(2)
+    corrected = merged[~merged["is_outlier"]].groupby("year_month")["order_value"].sum().round(2)
+
+    print("(1) Monthly order_value INCLUDING the 2 outlier orders:")
+    print(with_outliers.map("{:,.2f}".format).to_string())
+    print(f"    Highest month: {with_outliers.idxmax()}")
+    print("\n(2) Monthly order_value EXCLUDING the 2 outlier orders (outlier-corrected):")
+    print(corrected.map("{:,.2f}".format).to_string())
+    print(f"    Highest month: {corrected.idxmax()}")
+
+    out = merged[merged["is_outlier"]]
+    desc = " and ".join(f"{r.order_id} ({r.quantity} units, Rs {r.order_value:,.2f}) on "
+                        f"{r.order_date:%Y-%m-%d}" for r in out.itertuples())
+    print(f"\nJanuary's apparent lead is an artifact. Both bulk orders landed in January: "
+          f"{desc}. Remove them and January drops from Rs {with_outliers['2026-01']:,.2f} to "
+          f"Rs {corrected['2026-01']:,.2f}, and March (Rs {corrected['2026-03']:,.2f}) is the "
+          f"genuine peak month. This is why outliers are flagged in Task 6 before the time "
+          f"series is built here, not after.")
+
+    assert with_outliers.idxmax() == "2026-01" and with_outliers["2026-01"] == 29582.10
+    assert with_outliers["2026-06"] == 11615.40
+    assert corrected.to_dict() == {
+        "2026-01": 11637.10, "2026-02": 13195.50, "2026-03": 20318.90,
+        "2026-04": 9495.30, "2026-05": 13151.10, "2026-06": 11615.40,
+    }, corrected.to_dict()
+    assert corrected.idxmax() == "2026-03"
+    assert sorted(out["order_id"]) == ["O0011", "O0098"]
+    return with_outliers, corrected
+
+
+def run_pipeline():
+    """Run Tasks 1-10 in order and return every result later layers use."""
     orders, customers, products = task1_load()
     orders = task2_payment_method(orders)
     orders_clean, dropped = task3_deduplicate(orders)
     orders_clean = task4_impute(orders_clean)
     merged = task5_merge_and_reconcile(orders_clean, dropped, customers, products)
     merged = task6_iqr_outliers(merged)
-    return merged
+    by_payment = task7_cod_hypothesis(merged)
+    segments = task8_segmentation(merged)
+    corr, corr_pairs = task9_correlation(merged)
+    monthly_raw, monthly_corrected = task10_monthly_trend(merged)
+    return {
+        "merged": merged,
+        "dropped": dropped,
+        "by_payment": by_payment,
+        "segments": segments,
+        "corr": corr,
+        "corr_pairs": corr_pairs,
+        "monthly_raw": monthly_raw,
+        "monthly_corrected": monthly_corrected,
+    }
 
 
 if __name__ == "__main__":
-    main()
+    run_pipeline()
