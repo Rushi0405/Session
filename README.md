@@ -308,16 +308,36 @@ The API key is only ever read from the `GEMINI_API_KEY` environment variable or 
 
 ## Reflections
 
-> ✏️ **Write this section yourself, in your own words. Replace these prompts and delete this line.**
->
-> - What surprised you most in the results? (For example, did you expect Tier-2 COD to be that much worse than Tier-1 COD?)
-> - Which step was hardest, and how did you solve it? (The duplicate check, the outlier logic, getting Gemini to keep the exact numbers?)
-> - If you had more time or more data, what would you look at next? (Return reasons, product-level returns, the cost of each return?)
+**What surprised me most in the results?**
+
+Two things. The first was COD by city tier. I already knew COD was the weak spot at 44.4%, but I didn't expect such a big gap once I split it by city tier. In Tier-2 cities, 12 of 22 COD orders came back (54.5%), against 37.5% across 32 COD orders in Tier-1. The blended COD figure was hiding where most of the damage is.
+
+The second was January. At first it looked like the best month by far, at ₹29,582.10. Then I saw that two bulk orders, O0011 (25 units on 28 Jan) and O0098 (30 units on 10 Jan), were behind it. Without them January falls to ₹11,637.10, and March (₹20,318.90) is the real peak. If I had built the monthly trend before checking for outliers, I would have reported the wrong best month.
+
+**Which step was hardest, and how did I solve it?**
+
+The hardest problems were the ones that gave no error at all. In SQLite, `discount_pct / 100` is whole-number division, so a 10% discount becomes 10/100 = 0. Every discount silently disappears and revenue comes out too high, while the query still looks fine. Dividing by `100.0` fixed it.
+
+The other one was typed-in numbers. My first version of the Python script had the Part 1 total, 99,860.20, written in by hand. The rules don't allow hardcoded numbers, so I changed the script to calculate that total itself from the 180 raw rows. It still matches the SQL result, and the script now prints MATCH when it checks against the database. Both cases taught me that a believable answer isn't the same as a correct one, so I added checks that compare each layer with the one before it.
+
+**What would I look at next with more time or data?**
+
+First, why customers return. The data only says whether an order was returned (1 or 0), not why. If most COD returns are refusals at the door, order confirmation or a prepaid incentive would help. If they're damaged products, the fix is packaging and delivery. Knowing the reason would tell Mamaearth which action to take first.
+
+Second, returns by product and category. I looked at revenue by category, but not return rates per product or category. A few products might be returned much more often than the rest, and that would be an easier and cheaper thing to fix than a whole payment method.
 
 ---
 
 ## AI assistance
 
-> ✏️ **Edit this to describe honestly how you worked, then delete this line.**
+I used an AI assistant (Claude) throughout this project. This is how:
 
-I used an AI assistant (Claude) as a helper on this project: for drafting and reviewing code, for checking results against the brief, and for drafting this README. I ran every script myself, checked the outputs against the expected figures, and edited the documentation to reflect my own understanding of the analysis.
+- **Data setup:** I gave it the raw data from the brief. It turned the data into the three CSV files and generated `seed_data.sql` from them.
+- **SQL (Part 1):** it wrote the schema and the nine report queries from the task descriptions. It ran them in SQLite and pasted the real outputs as comments. I checked every result against the expected values in the brief.
+- **Python (Part 2):** it wrote the cleaning, analysis and chart scripts. The first version was more complex, so I asked for a simpler, well-commented version that I could follow and explain. The final scripts are that simpler version.
+- **GenAI (Part 3):** I shared my class notebook on the Gemini API so the code would follow the patterns we were taught: `google-genai`, Colab Secrets for the key, temperature, token limit and timeout settings, and `try/except`. The assistant wrote the narrator, the offline fallback and the number checker in that style.
+- **Notebooks:** it made Colab notebook versions of Parts 2 and 3, and a separate notebook to test the offline fallback.
+- **Checking:** it re-ran the whole pipeline several times to confirm every number matched the brief. Along the way it caught problems such as integer division in SQL and numbers that had been typed in by hand.
+- **Documentation:** it drafted and revised this README. The Reflections answers above were drafted with its help, based on the points I chose as the most important to me.
+
+**My part:** I provided the brief, the data and my course material. I decided the style and structure I wanted and chose the focus of each reflection. I ran the code myself in Google Colab, generated `sample_output.txt` with my own free Gemini key, and compared the results with the brief before submitting.
