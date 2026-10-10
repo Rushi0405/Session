@@ -44,7 +44,7 @@ The short version, for anyone who only reads this section:
 │   └── orders.csv             180 orders: date, quantity, discount, payment method, rating, returned
 ├── analysis/
 │   ├── clean_and_eda.py       cleaning + analysis (Part 2, Tasks 1–10); writes narrator/findings.json
-│   ├── visualize.py           draws the two charts (Part 2, Task 11)
+│   ├── visualize.py           draws the two charts from the cleaned CSV (Part 2, Task 11)
 │   └── cleaned_data/          cleaned CSVs, re-created every time clean_and_eda.py runs
 │       ├── orders_clean.csv           175 cleaned orders
 │       ├── customers_clean.csv        45 customers (no cleaning needed)
@@ -75,7 +75,7 @@ data/*.csv
                 recomputes the raw total = 99,860.20  ◀───────────┘  → prints MATCH
                 cleans → 97,358.30, COD 44.4%, COD Tier-2 54.5%, March peak
                    │
-                   ├─▶ visualize.py → the two PNG charts
+                   ├─▶ analysis/cleaned_data/*.csv → visualize.py → the two PNG charts
                    └─▶ narrator/findings.json
                           │
                           ▼
@@ -239,7 +239,7 @@ Finally, the script saves the cleaned data in `analysis/cleaned_data/`: `orders_
 
 ### How the charts were made
 
-`visualize.py` uses matplotlib. Instead of copying numbers into it, it imports the analysis (`import clean_and_eda as eda`) and draws straight from the computed results.
+`visualize.py` uses matplotlib. It doesn't repeat the analysis. It reads the cleaned table that `clean_and_eda.py` saved (`analysis/cleaned_data/orders_merged_clean.csv`), works out the return rates and the outlier-free monthly totals from it, and draws the charts. No number is copied in by hand. If the cleaned file isn't there yet, it tells you to run `clean_and_eda.py` first.
 
 **Return rate by payment method**
 

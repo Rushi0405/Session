@@ -1,22 +1,34 @@
 # =====================================================================
 # Part 2 - Task 11: Two visualizations
 # =====================================================================
-# How to run (from the main repo folder, after clean_and_eda.py):
-#     python analysis/visualize.py
+# How to run (from the main repo folder):
+#     python analysis/clean_and_eda.py     <- run this first (once): it saves the cleaned CSVs
+#     python analysis/visualize.py         <- then this: it only reads the cleaned data and draws
 #
-# The charts use the results calculated in clean_and_eda.py.
-# "import clean_and_eda" runs that script again from the raw CSV files,
-# so no number is typed in by hand. (Its printed output appears again first.)
+# The charts are made from analysis/cleaned_data/orders_merged_clean.csv, which
+# clean_and_eda.py writes. No number is typed in by hand: every value on the
+# charts is calculated below from that cleaned file.
 # Both charts are saved in the visualizations/ folder.
 
 import os
+import sys
 
 import matplotlib
 matplotlib.use("Agg")              # save charts to files (no window needed)
 import matplotlib.pyplot as plt
 import pandas as pd
 
-import clean_and_eda as eda        # gives us eda.payment_summary and eda.monthly_without
+CLEANED_FILE = "analysis/cleaned_data/orders_merged_clean.csv"
+
+# Stop with a clear message if Part 2 has not been run yet
+if not os.path.exists(CLEANED_FILE):
+    print(f"ERROR: {CLEANED_FILE} not found.")
+    print("Run 'python analysis/clean_and_eda.py' first - it creates the cleaned CSV files.")
+    sys.exit(1)
+
+# Load the cleaned analysis table (175 orders, with order_value, is_outlier and year_month)
+merged = pd.read_csv(CLEANED_FILE)
+print(f"Loaded {CLEANED_FILE}: {merged.shape}")
 
 # Create the output folder if it does not exist yet
 os.makedirs("visualizations", exist_ok=True)
@@ -25,8 +37,13 @@ os.makedirs("visualizations", exist_ok=True)
 # ---------------------------------------------------------------------
 # Chart 1: Return rate by payment method (bar chart)
 # ---------------------------------------------------------------------
-# payment_summary is already sorted from highest to lowest return rate (Task 7)
-rates = eda.payment_summary["return_rate_%"]
+# Return rate per payment method = share of orders with returned = 1 (same as Task 7)
+# Sorted from highest to lowest. Expected: COD 44.4, UPI 18.9, CARD 14.7
+rates = (merged.groupby("payment_method")["returned"].mean() * 100).round(1)
+rates = rates.sort_values(ascending=False)
+print("\nReturn rate by payment method (%):")
+print(rates)
+
 cod_rate = rates["COD"]
 card_rate = rates["CARD"]
 
@@ -47,14 +64,18 @@ plt.ylabel("Return rate (%)")
 plt.ylim(0, rates.max() * 1.2)
 plt.savefig("visualizations/return_rate_by_payment.png", dpi=150, bbox_inches="tight")
 plt.close()
-print("\nSaved visualizations/return_rate_by_payment.png")
+print("Saved visualizations/return_rate_by_payment.png")
 
 
 # ---------------------------------------------------------------------
 # Chart 2: Monthly revenue trend, outlier-corrected (line chart)
 # ---------------------------------------------------------------------
-# We use monthly_without (Task 10), NOT the version inflated by the 2 bulk orders
-monthly = eda.monthly_without
+# Monthly revenue WITHOUT the outlier orders (same as Task 10, version 2)
+# Expected peak: 2026-03 = 20318.90
+monthly = merged[merged["is_outlier"] == False].groupby("year_month")["order_value"].sum().round(2)
+print("\nMonthly revenue, outliers excluded:")
+print(monthly)
+
 peak_month = monthly.idxmax()                                   # e.g. "2026-03"
 peak_name = pd.to_datetime(peak_month).strftime("%B %Y")        # e.g. "March 2026"
 
