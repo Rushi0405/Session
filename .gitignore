@@ -2,5 +2,3 @@
 __pycache__/
 .venv/
 .env
-# cleaned CSVs are re-created by analysis/clean_and_eda.py on every run
-data/cleaned/

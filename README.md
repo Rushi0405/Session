@@ -41,13 +41,15 @@ The short version, for anyone who only reads this section:
 ├── data/
 │   ├── customers.csv          45 customers: city, city tier, signup date, how they found us
 │   ├── products.csv           16 products: name, category, price in rupees
-│   ├── orders.csv             180 orders: date, quantity, discount, payment method, rating, returned
-│   └── cleaned/               created when you run clean_and_eda.py (not stored in the repo)
-│       ├── orders_clean.csv           175 cleaned orders
-│       └── orders_merged_clean.csv    cleaned orders + product and customer details, order value, outlier flag
+│   └── orders.csv             180 orders: date, quantity, discount, payment method, rating, returned
 ├── analysis/
 │   ├── clean_and_eda.py       cleaning + analysis (Part 2, Tasks 1–10); writes narrator/findings.json
-│   └── visualize.py           draws the two charts (Part 2, Task 11)
+│   ├── visualize.py           draws the two charts (Part 2, Task 11)
+│   └── cleaned_data/          cleaned CSVs, re-created every time clean_and_eda.py runs
+│       ├── orders_clean.csv           175 cleaned orders
+│       ├── customers_clean.csv        45 customers (no cleaning needed)
+│       ├── products_clean.csv         16 products (no cleaning needed)
+│       └── orders_merged_clean.csv    cleaned orders + product and customer details, order value, outlier flag
 ├── visualizations/
 │   ├── return_rate_by_payment.png
 │   └── monthly_revenue_trend.png
@@ -57,7 +59,7 @@ The short version, for anyone who only reads this section:
     └── sample_output.txt      one real Gemini run, saved and checked
 ```
 
-The CSVs in `data/` are the original files and have never been edited by hand. All cleaning happens in Python, and the cleaned versions are saved separately in `data/cleaned/` each time the script runs.
+The CSVs in `data/` are the original files and have never been edited by hand. All cleaning happens in Python, and the cleaned versions are saved separately in `analysis/cleaned_data/` each time the script runs.
 
 ---
 
@@ -233,7 +235,7 @@ Report (i) adds a column, so to run the file a second time, rebuild the database
 9. **Correlations:** all six pairs among rating, returns, discount and quantity are negligible (below 0.2). That rules out the discount theory.
 10. **Monthly trend:** I compute monthly revenue twice, with and without the flagged orders. Flagging them first is what reveals March as the real peak.
 
-Finally, the script saves two cleaned CSVs in `data/cleaned/`: `orders_clean.csv` (the 175 cleaned orders) and `orders_merged_clean.csv` (the full analysis table behind the charts). It also writes the figures Part 3 needs into `narrator/findings.json`, along with a note saying which script produced them. The cleaned CSVs aren't committed, because anyone can recreate them by running the script.
+Finally, the script saves the cleaned data in `analysis/cleaned_data/`: `orders_clean.csv` (the 175 cleaned orders), `customers_clean.csv` and `products_clean.csv` (unchanged, since they needed no cleaning), and `orders_merged_clean.csv` (the full analysis table behind the charts). It also writes the figures Part 3 needs into `narrator/findings.json`, along with a note saying which script produced them.
 
 ### How the charts were made
 
