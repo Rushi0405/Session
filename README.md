@@ -145,44 +145,86 @@
 
 Choose **one** way to run it: on your own computer (Option A) or in Google Colab (Option B). Run every command from the **main repo folder**.
 
-### Option A: on your own computer
+### Option A: on your own computer (no Colab needed)
 
-**Step 1. Get the code and install the packages**
+New to the command line? Follow these steps in order. Every command is typed into a **terminal**:
+- **Windows:** press the Windows key, type `cmd` and open **Command Prompt**. Use Command Prompt, not PowerShell: the `<` in the SQL commands does not work in PowerShell.
+- **macOS:** press Cmd + Space, type `Terminal` and open it.
+- **Linux:** open **Terminal**.
+
+**Step 1. Check that Python is installed**
 ```bash
-git clone <this-repo-url>
+python --version
+```
+You need **Python 3.9 or newer**. If you get "not found", install Python from the official Python website. On Windows, tick **"Add Python to PATH"** during installation.
+On macOS and Linux the command may be `python3` instead of `python`. If so, use `python3` and `pip3` in every step below.
+
+**Step 2. Download the project**
+- With Git: `git clone <this-repo-url>`
+- Without Git: on the GitHub page click **Code → Download ZIP**, then unzip it.
+
+Then move into the project folder. All later commands must be run from here:
+```bash
 cd <repo-folder>
+```
+Check you are in the right place: `dir` (Windows) or `ls` (macOS/Linux) should list `README.md`, `sql`, `data`, `analysis` and `narrator`.
+
+**Step 3. Install the Python packages** (one time only)
+```bash
 pip install -r requirements.txt
 ```
 
-**Step 2. Install the SQLite command-line tool, if you don't have it** (check with `sqlite3 --version`)
-- **Windows:** download "sqlite-tools" from the official SQLite website (Download page), unzip it, and add the folder to your PATH.
-- **macOS:** already installed. Otherwise run `brew install sqlite`.
+**Step 4. Install the SQLite command-line tool** (check first with `sqlite3 --version`)
+- **Windows:** from the official SQLite website's Download page, get **"sqlite-tools" for Windows**. Unzip it and either add the folder to your PATH or copy `sqlite3.exe` into the project folder.
+- **macOS:** already installed. If it's missing, run `brew install sqlite`.
 - **Linux:** `sudo apt-get install sqlite3`
 
-**Step 3. Run Part 1 (SQL)**
+**Step 5. Run Part 1 (SQL)**
 ```bash
 sqlite3 mamaearth.db < sql/schema.sql
 sqlite3 mamaearth.db < sql/seed_data.sql
 sqlite3 -header -column mamaearth.db < sql/reports.sql
 ```
+The first command creates the file `mamaearth.db` (the database). The last command prints reports (a)–(i).
+> Using PowerShell anyway? Replace `<` with a pipe, for example: `Get-Content sql/schema.sql | sqlite3 mamaearth.db`
+> Can't install `sqlite3`? Load the database with Python instead:
+> `python -c "import sqlite3; c=sqlite3.connect('mamaearth.db'); [c.executescript(open(f).read()) for f in ('sql/schema.sql','sql/seed_data.sql')]"`
+> Then open `mamaearth.db` in a free tool such as **DB Browser for SQLite** and run the queries from `sql/reports.sql` in its **Execute SQL** tab.
 
-**Step 4. Run Part 2 (Python analysis)**
+**Step 6. Run Part 2 (Python analysis)**
 ```bash
 python analysis/clean_and_eda.py
 python analysis/visualize.py
 ```
+The first script prints every task's result and creates `narrator/findings.json`. The second creates the two PNG charts in `visualizations/`.
 
-**Step 5. Run Part 3 (GenAI narrative)**
+**Step 7. Run Part 3 (GenAI narrative), with or without your own API key**
+
+*Without a key:* this works straight away, offline.
 ```bash
-# Without a key (offline template), works straight away:
-python narrator/generate_narrative.py
-
-# With a free Gemini key (set it as an environment variable, never inside a file):
-export GEMINI_API_KEY="your-key-here"        # macOS / Linux
-set GEMINI_API_KEY=your-key-here             # Windows (Command Prompt)
-$env:GEMINI_API_KEY="your-key-here"          # Windows (PowerShell)
 python narrator/generate_narrative.py
 ```
+
+*With your own free Gemini API key:*
+1. Get a free key: sign in to **Google AI Studio** with a personal Gmail account. Click **Get API key**, then **Create API key**, choosing **"Create API key in new project"**. Copy the key. Use the free tier only: never enter card details or a paid-only key.
+2. Put the key in an **environment variable** in the same terminal window. Never paste it into a `.py` file. Replace `your-key-here` with your key:
+
+   | Your terminal | Command |
+   |---|---|
+   | Windows: Command Prompt | `set GEMINI_API_KEY=your-key-here` (no quotes, no spaces around `=`) |
+   | Windows: PowerShell | `$env:GEMINI_API_KEY="your-key-here"` |
+   | macOS / Linux | `export GEMINI_API_KEY="your-key-here"` |
+
+3. Run the narrator in the **same** terminal window:
+   ```bash
+   python narrator/generate_narrative.py
+   ```
+4. You should see `GEMINI_API_KEY found -> calling Gemini`, then the Situation / Complication / Resolution narrative, then 5 × `[PASS]`. The Gemini text is saved to `narrator/sample_output.txt`.
+
+Notes:
+- The key only lasts until you close that terminal window. Set it again next time.
+- To go back to offline mode, open a new terminal, or remove the key: `set GEMINI_API_KEY=` (Command Prompt), `Remove-Item Env:GEMINI_API_KEY` (PowerShell), `unset GEMINI_API_KEY` (macOS/Linux).
+- If the key is wrong or the free quota is used up, the script prints the error and **automatically switches to the offline narrative**. It never crashes.
 
 ### Option B: in Google Colab (nothing to install locally)
 Open a new notebook in Google Colab and run these cells:
