@@ -155,7 +155,7 @@ pip install -r requirements.txt
 ```
 
 **Step 2. Install the SQLite command-line tool, if you don't have it** (check with `sqlite3 --version`)
-- **Windows:** download "sqlite-tools" from sqlite.org/download.html, unzip it, and add the folder to your PATH.
+- **Windows:** download "sqlite-tools" from the official SQLite website (Download page), unzip it, and add the folder to your PATH.
 - **macOS:** already installed. Otherwise run `brew install sqlite`.
 - **Linux:** `sudo apt-get install sqlite3`
 
@@ -185,7 +185,7 @@ python narrator/generate_narrative.py
 ```
 
 ### Option B: in Google Colab (nothing to install locally)
-Open a new notebook at colab.research.google.com and run these cells:
+Open a new notebook in Google Colab and run these cells:
 ```python
 !git clone <this-repo-url>
 %cd <repo-folder>
