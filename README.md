@@ -330,14 +330,6 @@ Second, returns by product and category. I looked at revenue by category, but no
 
 ## AI assistance
 
-I used an AI assistant (Claude) throughout this project. This is how:
+I used Claude as an AI assistant on this project. It helped me convert the raw data into CSV files, write the SQL scripts, the Python analysis and chart code, and the Gemini narrator, and it drafted this README, including the Reflections from the points I chose. I asked for simple, well-commented code so that I could follow and explain each step, and I shared my class Gemini notebook so the Part 3 code would follow what we were taught.
 
-- **Data setup:** I gave it the raw data from the brief. It turned the data into the three CSV files and generated `seed_data.sql` from them.
-- **SQL (Part 1):** it wrote the schema and the nine report queries from the task descriptions. It ran them in SQLite and pasted the real outputs as comments. I checked every result against the expected values in the brief.
-- **Python (Part 2):** it wrote the cleaning, analysis and chart scripts. The first version was more complex, so I asked for a simpler, well-commented version that I could follow and explain. The final scripts are that simpler version.
-- **GenAI (Part 3):** I shared my class notebook on the Gemini API so the code would follow the patterns we were taught: `google-genai`, Colab Secrets for the key, temperature, token limit and timeout settings, and `try/except`. The assistant wrote the narrator, the offline fallback and the number checker in that style.
-- **Notebooks:** it made Colab notebook versions of Parts 2 and 3, and a separate notebook to test the offline fallback.
-- **Checking:** it re-ran the whole pipeline several times to confirm every number matched the brief. Along the way it caught problems such as integer division in SQL and numbers that had been typed in by hand.
-- **Documentation:** it drafted and revised this README. The Reflections answers above were drafted with its help, based on the points I chose as the most important to me.
-
-**My part:** I provided the brief, the data and my course material. I decided the style and structure I wanted and chose the focus of each reflection. I ran the code myself in Google Colab, generated `sample_output.txt` with my own free Gemini key, and compared the results with the brief before submitting.
+I provided the brief, data and course material, ran the code myself in Google Colab, generated `sample_output.txt` with my own Gemini key, and checked every result against the expected values in the brief.
