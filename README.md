@@ -12,8 +12,8 @@
 5. [Requirements](#5-requirements)
 6. [Getting started (step by step)](#6-getting-started-step-by-step)
 7. [Part 1: SQL relational layer and reporting](#7-part-1--sql-relational-layer--reporting)
-8. [Part 2: Python data wrangling and EDA](#8-part-2--python-data-wrangling--eda)
-9. [Part 3: GenAI insight narrator](#9-part-3--genai-insight-narrator)
+8. [Part 2: Python data wrangling and EDA](#8-part-2--python-data-wrangling--eda) (includes 8.1 How the visualizations were generated)
+9. [Part 3: GenAI insight narrator](#9-part-3--genai-insight-narrator) (includes 9.1 Narrative generation methodology)
 10. [Methods and tools used](#10-methods-and-tools-used)
 11. [Data-quality issues and how they are handled](#11-data-quality-issues-and-how-they-are-handled)
 12. [Troubleshooting](#12-troubleshooting)
@@ -309,6 +309,37 @@ This part reads the **raw CSVs directly** and prints every intermediate result.
 | 11 | Two charts | matplotlib (`visualize.py`) | `return_rate_by_payment.png`, `monthly_revenue_trend.png` |
 | — | Export | `json.dump` | Writes `narrator/findings.json` for Part 3 |
 
+### 8.1 How the visualizations were generated
+
+Both charts are made by `analysis/visualize.py` with **matplotlib**. Run it after `clean_and_eda.py`:
+```bash
+python analysis/visualize.py
+```
+**No number is typed into the charts.** The script starts with `import clean_and_eda as eda`, which re-runs the Part 2 analysis from the raw CSVs. The charts are then drawn from the computed results, `eda.payment_summary` (Task 7) and `eda.monthly_without` (Task 10). Running the script again regenerates identical PNG files.
+
+**Chart 1: `visualizations/return_rate_by_payment.png` (bar chart)**
+
+![Return rate by payment method](visualizations/return_rate_by_payment.png)
+
+| Design choice | Why |
+|---|---|
+| Data: return rate per cleaned payment method (Task 7) | Shows the main finding of the COD hypothesis |
+| Bars sorted from highest to lowest | The biggest problem is read first |
+| COD highlighted in blue, the others grey | Draws the eye to the problem segment |
+| Exact % written on each bar | No need to read values off the axis |
+| Title states the finding, built from the data: "COD Returns at 44.4% — 3x Card" | The chart's message is clear at a glance |
+
+**Chart 2: `visualizations/monthly_revenue_trend.png` (line chart)**
+
+![Monthly revenue trend, outliers excluded](visualizations/monthly_revenue_trend.png)
+
+| Design choice | Why |
+|---|---|
+| Data: the **outlier-corrected** monthly revenue (Task 10), not the inflated version | The two bulk orders would otherwise make January look like the best month |
+| Peak month labelled with its value (₹20,318.90) | Highlights the answer |
+| Title names the real peak, built from the data: "March 2026 Is the Peak Revenue Month (Outliers Excluded)" | States the conclusion |
+| Y-axis starts at 0, light horizontal grid | Honest scale, easy to read |
+
 ---
 
 ## 9. Part 3: GenAI insight narrator
@@ -325,6 +356,33 @@ This part reads the **raw CSVs directly** and prints every intermediate result.
 | Sample | A successful Gemini run is saved to `narrator/sample_output.txt`, and the checker runs on that saved file. |
 
 **API key safety:** the key is only read from the `GEMINI_API_KEY` environment variable, or from Colab Secrets. It is never written into code or committed to the repo.
+
+### 9.1 Narrative generation methodology
+
+The narrative is made in 5 steps. Every number in it comes from `findings.json`.
+
+```
+findings.json ─▶ 1. build prompt ─▶ 2. call Gemini ─▶ 3. validate answer ─┬─▶ success ─▶ 5. check numbers + save sample
+                                                                          └─▶ error ───▶ 4. offline template ─▶ 5. check numbers
+```
+
+1. **Load the verified numbers.** `load_findings()` reads `narrator/findings.json`, which Part 2 wrote. If the file is missing, the script stops with "run `analysis/clean_and_eda.py` first" instead of guessing.
+2. **Build the prompt (prompt engineering).** The prompt has two separate parts:
+   - **System instruction:** fixed rules. It sets the **role** (senior data analyst writing for Mamaearth's regional ops and finance heads), the **structure** (three labelled sections, Situation, Complication and Resolution, in about 250 words), the **number rule** (use only the supplied figures with the same values and invent nothing), and **formatting** (₹ with 2 decimals, % with 1 decimal, months by name, plain text).
+   - **User prompt:** the data. It's built with f-strings from the `findings` dict. No number is typed into the prompt, so a different `findings.json` automatically gives a different narrative.
+3. **Call Gemini with locked parameters.** `client.models.generate_content(...)` with:
+   - model `gemini-3.1-flash-lite` (free tier)
+   - `temperature=0.0`, for the most consistent factual output, because this is a business report, not creative writing
+   - `max_output_tokens=2048`, so a three-section narrative is never cut off
+   - `timeout=30000` milliseconds (30 s)
+
+   The whole call is in `try/except`, so it always returns a dictionary: `{"status": "success", "narrative", "tokens"}` or `{"status": "error", "narrative": None, "message"}`. An empty answer, or one cut off by the token limit, also counts as an error.
+4. **Offline fallback.** If there's no API key, or the Gemini call fails (wrong key, no internet, quota, timeout), `generate_scr_narrative_offline()` writes the same three SCR sections from an f-string template filled from `findings.json`. It needs no key, makes no network call, gives the same output every time and returns the same dictionary shape.
+5. **Check the numbers (guardrail).** `check_numeric_accuracy()` confirms that the narrative contains the 5 key figures and prints PASS or FAIL for each: cleaned revenue **97,358.30**, COD return rate **44.4**, COD + Tier-2 rate **54.5**, duplicate gap **2,501.90**, and **March** with **20,318.90**. Commas are removed before comparing, so `97,358.30` and `97358.3` both match. A second check warns if the narrative contains any number not found in `findings.json`, which would mean the AI made something up.
+   - On the **offline** path, the check is a hard pass/fail.
+   - On the **Gemini** path, the answer is saved to `narrator/sample_output.txt`, and the same checker runs again on that saved file. The grader checks the saved sample, not a live API call.
+
+**API key safety:** the key is read only from the `GEMINI_API_KEY` environment variable, or from Colab Secrets. It's never written in code or committed to the repo.
 
 ---
 
